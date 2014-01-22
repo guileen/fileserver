@@ -1,0 +1,19 @@
+{
+  "name": "fileserver",
+  "private": true,
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "dependencies": {
+    "qweb": "~0.1.0",
+    "gm": "~1.14.2",
+    "formidable": "~1.0.14",
+    "cclog": "~0.1.8",
+    "mime": "~1.2.11",
+    "mkdirp": "~0.3.5"
+  }
+}
