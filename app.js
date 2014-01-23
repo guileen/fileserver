@@ -11,25 +11,47 @@ config.buckets = config.buckets || {};
 var defaultConfig = {
     uploadDir: __dirname + '/upload'
   , maxSize: 10 * 1024 * 1024
-  , id: '{hash}' // allowed {%yymmdd} {hash}
+  , id: '{hash}{ext}' // allowed {%yymmdd} {hash} {shortid}
+  , shortid: false
+  , shortidLength: 6
   , allowed: ['jpg', 'jpeg', 'png', 'bmp', 'zip', 'rar', 'txt']
-  , image: {
-        // jpeg, jpg, bmp -> jpg
-        // gif -> gif
-        // png -> png
-        usercrop: true
-      , autocrop: true
-      , crop: []
+    // image configure
+    // jpeg, jpg, bmp -> jpg
+    // gif -> gif
+    // png -> png
+  , usercrop: true
+  , autocrop: true
+  , minratio: 0 // min w/h 1/2
+  , maxratio: 0 // max w/h 2/1
+  , fixratio: 0
+  , minwidth: 0 // not allowed if quality too small
+  , minheight: 0
+  , maxwidth: 0 //
+  , maxheight: 0
+  , quality: {
+        "default": 100
+      , mid: 80
+      , low: 50
+    }
+  , copies: [] // e.g.  ['1024x0-low', '1024x768-mid', '1600x960']
+}
+
+// init config from defaultConfig
+for (var key in defaultConfig) {
+    // don't use config[key] = config[key] || defaultConfig[key];
+    // config.foo = false; defaultConfig.foo = true; result should be false;
+    if(config[key] === undefined) {
+        config[key] = defaultConfig[key];
     }
 }
 
-// init bucket config
 for(var bucket in config.buckets) {
     var conf = config.buckets[bucket];
-    conf.id = conf.id || config.id || defaultConfig.id;
-    conf.maxSize = conf.maxSize || config.maxSize || defaultConfig.maxSize;
-    conf.checksum = conf.checksum || config.checksum || defaultConfig.checksum;
-    conf.uploadDir = conf.uploadDir || config.uploadDir || defaultConfig.uploadDir;
+    // init bucket config
+    for (var key in config) {
+        if(conf[key] === undefined) 
+            conf[key] = config[key];
+    }
     mkdirp.sync(conf.uploadDir + '/' + bucket);
     var allowed = conf.allowed || config.allowed || defaultConfig.allowed;
     if(Array.isArray(allowed)) {
@@ -42,9 +64,13 @@ function handleFile(file, conf) {
     if(file.size == 0) return fs.unlink(file.name);
     var id = util.formatId(conf.id, {
             hash: file.hash
+          , ext: _path.extname(file.name)
           , size: file.size
           , date: file.lastModifiedDate
+          , shortid: conf.shortid && util.genShortId(conf.shortidLength)
     });
+    console.log(conf);
+    // TODO shortid
     var newPath = _path.join(conf.uploadDir, bucket, id);
     fs.rename(file.path, newPath, function(err){
             if(err) {
