@@ -2,6 +2,7 @@ var os = require('os');
 var fs = require('fs');
 var _path = require('path');
 var mkdirp = require('mkdirp');
+var sizeOf = require('image-size');
 var util = require('./util');
 var qweb = require('qweb');
 var cclog = require('cclog');
@@ -52,6 +53,8 @@ for(var bucket in config.buckets) {
         if(conf[key] === undefined) 
             conf[key] = config[key];
     }
+    conf.minratio = conf.fixratio || conf.minratio;
+    conf.maxratio = conf.fixratio || conf.maxratio;
     mkdirp.sync(conf.uploadDir + '/' + bucket);
     var allowed = conf.allowed || config.allowed || defaultConfig.allowed;
     if(Array.isArray(allowed)) {
@@ -60,30 +63,100 @@ for(var bucket in config.buckets) {
     console.log(conf)
 }
 
-function handleFile(file, conf) {
-    if(file.size == 0) return fs.unlink(file.name);
-    var id = util.formatId(conf.id, {
-            hash: file.hash
-          , ext: _path.extname(file.name)
-          , size: file.size
-          , date: file.lastModifiedDate
-          , shortid: conf.shortid && util.genShortId(conf.shortidLength)
-    });
-    console.log(conf);
-    // TODO shortid
-    var newPath = _path.join(conf.uploadDir, bucket, id);
-    fs.rename(file.path, newPath, function(err){
+function moveFile(oldPath, newPath) {
+    fs.rename(oldPath, newPath, function(err){
             if(err) {
                 if(err.code == 'ENOENT') {
                     mkdirp(_path.dirname(newPath), function made(er) {
                             if(er) throw er;
-                            fs.rename(file.path, newPath, cclog.ifError);
+                            fs.rename(oldPath, newPath, cclog.ifError);
                     });
                 } else {
                     cclog.error('error to store file', err);
                 }
             }
     })
+}
+
+function processFile(bucket, conf, file, id) {
+
+    // confTag 1024x0-low
+    function getNewFilePath(confTag) {
+
+    }
+
+    function getCropRect() {
+        // body...
+    }
+
+    // confTag 1024x768-mid
+    function handleTag(tag) {
+        var m = tag.match(/(\d*)x(\d*)(?:-(.+))/);
+        var _w = parseInt(m[1])
+          , _h = parseInt(m[2])
+          , quality = m[3] ? conf.quality[m[3]] : 100
+          ;
+        // TODO crop
+        chain.resize(_w, _h)
+          .write(_path.join(conf.uploadDir, bucket, tag, id), cclog.ifError);
+    }
+
+    var baseRect, rawImage, w, h, ratio;
+    if(conf.usercrop) {
+    }
+    if(conf.autocrop) {
+        // gm(file.path)
+    }
+    sizeOf(file.path, function(err, dim) {
+            var chain = gm(file.path);
+            w = dim.width;
+            h = dim.height;
+            ratio = w / h;
+            if(usercrop) {
+                // TODO: uploader defined crop like avatar dimention cut.
+            } else if(autocrop) {
+                // ratio 0 to 1, tall-thin to short-fat.
+                if(conf.minratio && ratio < conf.minratio) {
+                    h = w / conf.minratio;
+                    chain.crop(w, h, 0, (dim.height - h) / 2);
+                } else if(conf.maxratio && ratio > conf.maxratio) {
+                    w = h * conf.maxratio;
+                    chain.crop(w, h, (dim.width - w) / 2, 0);
+                }
+                ratio = w / h;
+            }
+            if(conf.maxwidth && w > conf.maxwidth) {
+                w = conf.maxwidth;
+                h = w / ratio;
+                chain.resize(w, h)
+                // } else if(conf.maxheight && h > conf.maxheight) {
+                // should not use maxheight. use maxwidth and minratio to control this
+            }
+            rawImage = _path.join(conf.uploadDir, bucket, 'default', id);
+            chain.write(rawImage, function (err) {
+                    if(err) {
+                        cclog.error('error to save', newPath, err);
+                    }
+                    cclog.info('save image to', newPath);
+
+                    conf.copies.forEach(handleTag);
+            });
+    })
+}
+
+function handleFile(file, conf) {
+    if(file.size == 0) return fs.unlink(file.name);
+    file.ext = _path.extname(file.name);
+    file.shortid = conf.shortid && util.genShortId(conf.shortidLength);
+    file.date = file.lastModifiedDate;
+    var id = util.formatId(conf.id, file);
+    if(file.type.indexOf('image') >= 0) {
+        id = replace(/\.bmp$/i, '.jpg');
+        handleImage(file, id, conf);
+    } else {
+        var newPath = _path.join(conf.uploadDir, bucket, 'default', id);
+        moveFile(file.path, newPath);
+    }
 }
 
 qweb.res.sendStatus = function(statusCode, msg) {

@@ -5,7 +5,7 @@ var exports = module.exports = {
   , checksum: 'sha1'
   , buckets: {
         avatar: {
-            allowed: ['jpg', 'jpeg', 'png', 'bmp']
+            allowed: ['jpg', 'jpeg', 'png', 'bmp', 'zip']
           , usercrop: true
           , autocrop: true
           , minratio: 1/2
