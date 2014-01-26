@@ -1,5 +1,6 @@
 var os = require('os');
 var fs = require('fs');
+var gm = require('gm');
 var _path = require('path');
 var mkdirp = require('mkdirp');
 var sizeOf = require('image-size');
@@ -60,7 +61,6 @@ for(var bucket in config.buckets) {
     if(Array.isArray(allowed)) {
         conf.allowed = new RegExp('\\.(' + allowed.join('|') + ')$', ['i']);
     }
-    console.log(conf)
 }
 
 function moveFile(oldPath, newPath) {
@@ -78,7 +78,29 @@ function moveFile(oldPath, newPath) {
     })
 }
 
-function processFile(bucket, conf, file, id) {
+function writeChain(chain, path, callback) {
+    fs.exists(path, function (exists) {
+            if(!exists) {
+                mkdirp(_path.dirname(path), function made(er) {
+                        if(er) return callback(er);
+                        chain.write(path, callback);
+                })
+            } else chain.write(path, callback);
+    })
+    // chain.write(path, function(err) {
+    //         if(err) {
+    //             if(err.code == 'ENOENT') {
+    //                 return mkdirp(_path.dirname(path), function made(er) {
+    //                         if(er) return callback(er);
+    //                         chain.write(path, callback);
+    //                 })
+    //             }
+    //         }
+    //         callback(err);
+    // })
+}
+
+function processImage(bucket, conf, file, id) {
 
     // confTag 1024x0-low
     function getNewFilePath(confTag) {
@@ -91,14 +113,15 @@ function processFile(bucket, conf, file, id) {
 
     // confTag 1024x768-mid
     function handleTag(tag) {
-        var m = tag.match(/(\d*)x(\d*)(?:-(.+))/);
+        var m = tag.match(/(\d*)x(\d*)(?:-(.+))?/);
+        if(!m) throw new Error('bad tag ' + tag);
         var _w = parseInt(m[1])
           , _h = parseInt(m[2])
           , quality = m[3] ? conf.quality[m[3]] : 100
           ;
         // TODO crop
-        chain.resize(_w, _h)
-          .write(_path.join(conf.uploadDir, bucket, tag, id), cclog.ifError);
+        var chain = gm(rawImage).resize(_w, _h);
+        writeChain(chain, _path.join(conf.uploadDir, bucket, tag, id), cclog.intercept('handleTag ' + tag));
     }
 
     var baseRect, rawImage, w, h, ratio;
@@ -112,9 +135,9 @@ function processFile(bucket, conf, file, id) {
             w = dim.width;
             h = dim.height;
             ratio = w / h;
-            if(usercrop) {
+            if(conf.usercrop) {
                 // TODO: uploader defined crop like avatar dimention cut.
-            } else if(autocrop) {
+            } else if(conf.autocrop) {
                 // ratio 0 to 1, tall-thin to short-fat.
                 if(conf.minratio && ratio < conf.minratio) {
                     h = w / conf.minratio;
@@ -133,26 +156,28 @@ function processFile(bucket, conf, file, id) {
                 // should not use maxheight. use maxwidth and minratio to control this
             }
             rawImage = _path.join(conf.uploadDir, bucket, 'default', id);
-            chain.write(rawImage, function (err) {
+            writeChain(chain, rawImage, function (err) {
                     if(err) {
-                        cclog.error('error to save', newPath, err);
+                        cclog.error('error to save', rawImage, err);
+                    } else {
+                        cclog.info('save image to', rawImage);
                     }
-                    cclog.info('save image to', newPath);
+                    fs.unlink(file.path);
 
                     conf.copies.forEach(handleTag);
             });
     })
 }
 
-function handleFile(file, conf) {
+function handleFile(file, bucket, conf) {
     if(file.size == 0) return fs.unlink(file.name);
     file.ext = _path.extname(file.name);
     file.shortid = conf.shortid && util.genShortId(conf.shortidLength);
     file.date = file.lastModifiedDate;
     var id = util.formatId(conf.id, file);
     if(file.type.indexOf('image') >= 0) {
-        id = replace(/\.bmp$/i, '.jpg');
-        handleImage(file, id, conf);
+        id = id.replace(/\.bmp$/i, '.jpg');
+        processImage(bucket, conf, file, id);
     } else {
         var newPath = _path.join(conf.uploadDir, bucket, 'default', id);
         moveFile(file.path, newPath);
@@ -176,17 +201,14 @@ var server = qweb({
             form.hash = bucketConf.checksum;
             form.uploadDir = bucketConf.uploadDir;
             var allowed = bucketConf.allowed;
-            console.log(allowed);
             form.on('fileBegin', function(name, file) {
                     if(!allowed.test(file.name)) 
                         return res.sendStatus('406', '406 File Type Not Acceptable.');
-                    console.log('begin file', name, file);
             })
             form.parse(req, function(err, fields, files) {
-                    if(err) console.log(err.stack);
-                    console.log('all done', util.inspect(files));
+                    if(err) cclog.error('error to parse form', err);
                     for(var name in files) {
-                        handleFile(files[name], bucketConf);
+                        handleFile(files[name], bucket, bucketConf);
                     }
                     res.end(util.inspect([fields, files]))
             });
