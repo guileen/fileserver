@@ -119,8 +119,18 @@ function processImage(bucket, conf, file, id) {
           , _h = parseInt(m[2])
           , quality = m[3] ? conf.quality[m[3]] : 100
           ;
-        // TODO crop
-        var chain = gm(rawImage).resize(_w, _h);
+        var chain = gm(rawImage);
+        if(_w && _h) {
+            var _ratio = _w / _h;
+            if(_ratio < ratio) {
+                chain.resize(null, _h);
+                chain.crop(_w, _h, (ratio * _h - _w) / 2, 0);
+            } else if (_ratio > ratio) {
+                chain.resize(_w);
+                chain.crop(_w, _h, 0, (_w / ratio - _h) / 2);
+            }
+        }
+        chain.resize(_w, _h);
         writeChain(chain, _path.join(conf.uploadDir, bucket, tag, id), cclog.intercept('handleTag ' + tag));
     }
 
@@ -135,25 +145,27 @@ function processImage(bucket, conf, file, id) {
             w = dim.width;
             h = dim.height;
             ratio = w / h;
-            if(conf.usercrop) {
-                // TODO: uploader defined crop like avatar dimention cut.
-            } else if(conf.autocrop) {
-                // ratio 0 to 1, tall-thin to short-fat.
-                if(conf.minratio && ratio < conf.minratio) {
-                    h = w / conf.minratio;
-                    chain.crop(w, h, 0, (dim.height - h) / 2);
-                } else if(conf.maxratio && ratio > conf.maxratio) {
-                    w = h * conf.maxratio;
-                    chain.crop(w, h, (dim.width - w) / 2, 0);
-                }
-                ratio = w / h;
-            }
             if(conf.maxwidth && w > conf.maxwidth) {
                 w = conf.maxwidth;
                 h = w / ratio;
                 chain.resize(w, h)
                 // } else if(conf.maxheight && h > conf.maxheight) {
                 // should not use maxheight. use maxwidth and minratio to control this
+            }
+            if(conf.usercrop) {
+                // TODO: uploader defined crop like avatar dimention cut.
+            } else if(conf.autocrop) {
+                // ratio 0 to 1, tall-thin to short-fat.
+                if(conf.minratio && ratio < conf.minratio) {
+                    var _h = w / conf.minratio;
+                    chain.crop(w, _h, 0, (h - _h) / 2);
+                    h = _h;
+                } else if(conf.maxratio && ratio > conf.maxratio) {
+                    var _w = h * conf.maxratio;
+                    chain.crop(_w, h, (w - _w) / 2, 0);
+                    w = _w;
+                }
+                ratio = w / h;
             }
             rawImage = _path.join(conf.uploadDir, bucket, 'default', id);
             writeChain(chain, rawImage, function (err) {
@@ -169,21 +181,6 @@ function processImage(bucket, conf, file, id) {
     })
 }
 
-function handleFile(file, bucket, conf) {
-    if(file.size == 0) return fs.unlink(file.name);
-    file.ext = _path.extname(file.name);
-    file.shortid = conf.shortid && util.genShortId(conf.shortidLength);
-    file.date = file.lastModifiedDate;
-    var id = util.formatId(conf.id, file);
-    if(file.type.indexOf('image') >= 0) {
-        id = id.replace(/\.bmp$/i, '.jpg');
-        processImage(bucket, conf, file, id);
-    } else {
-        var newPath = _path.join(conf.uploadDir, bucket, 'default', id);
-        moveFile(file.path, newPath);
-    }
-}
-
 qweb.res.sendStatus = function(statusCode, msg) {
     this.writeHead(statusCode);
     this.end(msg);
@@ -192,31 +189,66 @@ qweb.res.sendStatus = function(statusCode, msg) {
 var server = qweb({
         'post:/upload/:bucket': function(req, res) {
             var bucket = req.params.bucket;
-            var bucketConf = config.buckets[bucket];
-            if(!bucketConf) {
+            var conf = config.buckets[bucket];
+            if(!conf) {
                 return res.sendStatus(404, '404 no such bucket');
             }
             var form = new formidable.IncomingForm();
-            form.maxFieldSize = bucketConf.maxSize;
-            form.hash = bucketConf.checksum;
-            form.uploadDir = bucketConf.uploadDir;
-            var allowed = bucketConf.allowed;
+            form.maxFieldSize = conf.maxSize;
+            form.hash = conf.checksum;
+            form.uploadDir = conf.uploadDir;
+            var allowed = conf.allowed;
             form.on('fileBegin', function(name, file) {
                     if(!allowed.test(file.name)) 
                         return res.sendStatus('406', '406 File Type Not Acceptable.');
             })
             form.parse(req, function(err, fields, files) {
-                    if(err) cclog.error('error to parse form', err);
-                    for(var name in files) {
-                        handleFile(files[name], bucket, bucketConf);
+                    if(err) {
+                        cclog.error('error to parse form', err);
+                        res.end(JSON.stringify({err: 1}));
                     }
-                    res.end(util.inspect([fields, files]))
+                    var result = {};
+                    for(var name in files) {
+                        var file = files[name];
+                        if(file.size == 0) {
+                            fs.unlink(file.name);
+                            continue;
+                        }
+                        // generate id
+                        file.ext = _path.extname(file.name).toLowerCase();
+                        file.shortid = conf.shortid && util.genShortId(conf.shortidLength);
+                        file.date = file.lastModifiedDate;
+                        if(file.ext == '.bmp') file.ext = '.jpg';
+                        var id = util.formatId(conf.id, file);
+                        result[name] = id;
+                        // process file
+                        if(file.type.indexOf('image') >= 0) {
+                            processImage(bucket, conf, file, id);
+                        } else {
+                            var newPath = _path.join(conf.uploadDir, bucket, 'default', id);
+                            moveFile(file.path, newPath);
+                        }
+                    }
+                    if(fields.redirect) {
+                        var redirect = fields.redirect;
+                        var qs = [];
+                        for(var name in result) {
+                            qs.push(encodeURIComponent(name) + '=' + encodeURIComponent(result[name]));
+                        }
+                        qs = qs.join('&');
+                        res.writeHead(302, {
+                                'Location': redirect + (redirect.indexOf('?') > 0 ? '&' : '?') + qs
+                        })
+                        res.end();
+                    } else {
+                        res.end(JSON.stringify(result));
+                    }
             });
         }
       , 'post:/upload/:bucket/:id': function(req, res) {
 
         }
-      , '/img/:bucket/:id' : function(req, res){
+      , '/download/:bucket/:id' : function(req, res){
 
         }
       , '/debug/:bucket' : function(req, res){
@@ -229,7 +261,7 @@ var server = qweb({
 });
 
 if(!module.parent) {
-    var port = process.argv[2] || 4000;
+    var port = process.argv[2] || 7095;
     server.listen(port);
     console.log('server listen at', port)
 }

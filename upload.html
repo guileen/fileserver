@@ -6,6 +6,7 @@
         <form method="POST" enctype="multipart/form-data" action="/upload/{bucket}">
             <input type="file" name="file1">
             <input type="text" name="note">
+            <input type="text" name="redirect" value="http://192.168.0.54:7095/foo?bar">
             <input type="submit" value="Upload">
         </form>
     </body>

@@ -1,7 +1,7 @@
 var exports = module.exports = {
     uploadDir: __dirname + '/upload'
   , maxSize: 2 * 1024 * 1024 // 2M
-  , id: '{%yyyy-MM-dd}/{hash}'
+  , id: '{%yyyy-MM-dd}/{hash}{ext}'
   , checksum: 'sha1'
   , buckets: {
         avatar: {
@@ -13,8 +13,8 @@ var exports = module.exports = {
           , fixratio: 0
           , minwidth: 256
           , minheight: 256
-          , maxwidth: 1600
-          , maxheight: 1600
+          , maxwidth: 800
+          , maxheight: 800
           , quality: {
                 "default": 100
               , mid: 80
@@ -22,8 +22,9 @@ var exports = module.exports = {
             }
           , copies: [
                 '200x-low'
+              , '200x50-low'
               , 'x400-mid'
-              , '800x600'
+              , '256x256'
             ] // e.g.  ['1024x0-low', '1024x768-mid', '1600x960']
         }
     }
