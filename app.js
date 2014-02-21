@@ -140,6 +140,8 @@ function handleImage(path, width, height, quality, crop_rect, callback) {
                 } else if (_ratio > ratio) {
                     chain.resize(_w);
                     chain.crop(_w, _h, 0, (_w / ratio - _h) / 2);
+                } else {
+                    chain.resize(_w, _h);
                 }
             }
             // resize
