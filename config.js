@@ -6,11 +6,8 @@ var exports = module.exports = {
   , buckets: {
         avatar: {
             allowed: ['jpg', 'jpeg', 'png', 'bmp', 'zip']
-          , usercrop: true
-          , autocrop: true
           , minratio: 1/2
           , maxratio: 2/1
-          , fixratio: 0
           , minwidth: 256
           , minheight: 256
           , maxwidth: 800
