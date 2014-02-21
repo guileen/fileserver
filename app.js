@@ -100,6 +100,16 @@ function writeChain(chain, path, callback) {
     // })
 }
 
+function processFile(bucket, conf, file, id) {
+    // process file
+    if(file.type.indexOf('image') >= 0) {
+        processImage(bucket, conf, file, id);
+    } else {
+        var newPath = _path.join(conf.uploadDir, bucket, 'default', id);
+        moveFile(file.path, newPath);
+    }
+}
+
 function processImage(bucket, conf, file, id) {
 
     // confTag 1024x0-low
@@ -167,7 +177,7 @@ function processImage(bucket, conf, file, id) {
                 }
                 ratio = w / h;
             }
-            rawImage = _path.join(conf.uploadDir, bucket, 'default', id);
+            rawImage = _path.join(conf.uploadDir, bucket, id);
             writeChain(chain, rawImage, function (err) {
                     if(err) {
                         cclog.error('error to save', rawImage, err);
@@ -186,75 +196,85 @@ qweb.res.sendStatus = function(statusCode, msg) {
     this.end(msg);
 }
 
-var server = qweb({
-        'post:/upload/:bucket': function(req, res) {
-            var bucket = req.params.bucket;
-            var conf = config.buckets[bucket];
-            if(!conf) {
-                return res.sendStatus(404, '404 no such bucket');
-            }
-            var form = new formidable.IncomingForm();
-            form.maxFieldSize = conf.maxSize;
-            form.hash = conf.checksum;
-            form.uploadDir = conf.uploadDir;
-            var allowed = conf.allowed;
-            form.on('fileBegin', function(name, file) {
-                    if(!allowed.test(file.name)) 
-                        return res.sendStatus('406', '406 File Type Not Acceptable.');
-            })
-            form.parse(req, function(err, fields, files) {
-                    if(err) {
-                        cclog.error('error to parse form', err);
-                        res.end(JSON.stringify({err: 1}));
-                    }
-                    var result = {};
-                    for(var name in files) {
-                        var file = files[name];
-                        if(file.size == 0) {
-                            fs.unlink(file.name);
-                            continue;
-                        }
-                        // generate id
-                        file.ext = _path.extname(file.name).toLowerCase();
-                        file.shortid = conf.shortid && util.genShortId(conf.shortidLength);
-                        file.date = file.lastModifiedDate;
-                        if(file.ext == '.bmp') file.ext = '.jpg';
-                        var id = util.formatId(conf.id, file);
-                        result[name] = id;
-                        // process file
-                        if(file.type.indexOf('image') >= 0) {
-                            processImage(bucket, conf, file, id);
-                        } else {
-                            var newPath = _path.join(conf.uploadDir, bucket, 'default', id);
-                            moveFile(file.path, newPath);
-                        }
-                    }
-                    if(fields.redirect) {
-                        var redirect = fields.redirect;
-                        var qs = [];
-                        for(var name in result) {
-                            qs.push(encodeURIComponent(name) + '=' + encodeURIComponent(result[name]));
-                        }
-                        qs = qs.join('&');
-                        res.writeHead(302, {
-                                'Location': redirect + (redirect.indexOf('?') > 0 ? '&' : '?') + qs
-                        })
-                        res.end();
-                    } else {
-                        res.end(JSON.stringify(result));
-                    }
-            });
+var server = qweb();
+server.post('post:/:bucket', function(req, res) {
+        var bucket = req.params.bucket;
+        var conf = config.buckets[bucket];
+        if(!conf) {
+            return res.sendStatus(404, '404 no such bucket');
         }
-      , 'post:/upload/:bucket/:id': function(req, res) {
+        var form = new formidable.IncomingForm();
+        form.maxFieldSize = conf.maxSize;
+        form.hash = conf.checksum;
+        form.uploadDir = conf.uploadDir;
+        var allowed = conf.allowed;
+        form.on('fileBegin', function(name, file) {
+                if(!allowed.test(file.name)) 
+                    return res.sendStatus('406', '406 File Type Not Acceptable.');
+        })
+        form.parse(req, function(err, fields, files) {
+                if(err) {
+                    cclog.error('error to parse form', err);
+                    res.end(JSON.stringify({err: 1}));
+                }
+                var result = {};
+                for(var name in files) {
+                    var file = files[name];
+                    if(file.size == 0) {
+                        fs.unlink(file.path);
+                        continue;
+                    }
+                    // generate id
+                    file.ext = _path.extname(file.name).toLowerCase();
+                    file.shortid = conf.shortid && util.genShortId(conf.shortidLength);
+                    file.date = file.lastModifiedDate;
+                    if(file.ext == '.bmp') file.ext = '.jpg';
+                    var id = util.formatId(conf.id, file);
+                    result[name] = id;
+                    processFile(bucket, conf, file, id);
+                }
+                if(fields.redirect) {
+                    var redirect = fields.redirect;
+                    var qs = [];
+                    for(var name in result) {
+                        qs.push(encodeURIComponent(name) + '=' + encodeURIComponent(result[name]));
+                    }
+                    qs = qs.join('&');
+                    res.writeHead(302, {
+                            'Location': redirect + (redirect.indexOf('?') > 0 ? '&' : '?') + qs
+                    })
+                    res.end();
+                } else {
+                    res.end(JSON.stringify(result));
+                }
+        });
+}).put('/:bucket/:id', function(req, res) {
+        var bucket = req.params.bucket
+          , id = req.params.id
+          , conf = config.buckets[bucket]
+          , tmpPath = conf.uploadDir + '/' + Date.now() + '-' + id.replace(/\//g, '')
+          ;
+        if(!conf) {
+            return res.sendStatus(404, '404 no such bucket');
+        }
+        if(!id) {
+            return res.sendStatus(400, 'require id');
+        }
+        req.pipe(fs.createWriteStream(tmpPath));
+        // req.resume();
+        req.on('end', function() {
+                var file = {
+                    path : tmpPath
+                  , type : req.headers['content-type']
+                }
+                processFile(bucket, conf, file, id);
+                res.end();
+        });
+}).get('/:bucket/:id', function(req, res) {
 
-        }
-      , '/download/:bucket/:id' : function(req, res){
-
-        }
-      , '/debug/:bucket' : function(req, res){
-            var text = fs.readFileSync(__dirname + '/upload.html', 'utf-8');
-            res.end(text.replace(/{bucket}/g, req.params.bucket));
-        }
+}).get('/debug/:bucket', function(req, res) {
+        var text = fs.readFileSync(__dirname + '/upload.html', 'utf-8');
+        res.end(text.replace(/{bucket}/g, req.params.bucket));
 }).on('domainError', function(err, req, res) {
         cclog.error(req.method, req.url, err);
         res.sendStatus(500, 'ERR:' + err.message);
