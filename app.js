@@ -225,11 +225,11 @@ function processImage(bucket, conf, file, id) {
             }
             if(conf.minratio && ratio < conf.minratio) {
                 w = h * conf.minratio;
-                ratio = minratio;
+                ratio = conf.minratio;
             }
             if(conf.maxratio && ratio > conf.maxratio) {
                 h = w / conf.maxratio;
-                ratio = maxratio;
+                ratio = conf.maxratio;
             }
 
             rawImage = getBucketFile(bucket, id);
