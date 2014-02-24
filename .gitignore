@@ -1,11 +1,5 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-node_modules
 upload
-=======
-=======
-upload
->>>>>>> Initial commit
+config.js
 lib-cov
 *.seed
 *.log
@@ -21,7 +15,3 @@ results
 
 npm-debug.log
 node_modules
-<<<<<<< HEAD
->>>>>>> Initial commit
-=======
->>>>>>> Initial commit
