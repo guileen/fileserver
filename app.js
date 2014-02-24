@@ -389,7 +389,7 @@ server.post('post:/:bucket', function(req, res) {
 });
 
 if(!module.parent) {
-    var port = process.argv[2] || 7095;
+    var port = process.argv[2] || 7195;
     server.listen(port);
     console.log('server listen at', port)
 }
