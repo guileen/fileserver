@@ -63,8 +63,15 @@ for(var bucket in config.buckets) {
 
 function getBucketFile(bucket, id) {
     var conf = config.buckets[bucket];
-    return _path.join(conf.uploadDir, bucket, id);
+    // -- to /
+    return _path.join(conf.uploadDir, bucket, id.replace(/--/g, '/'));
 }
+
+function getBucketTagFile(bucket, tag, id) {
+    var conf = config.buckets[bucket];
+    return _path.join(conf.uploadDir, bucket, tag, id.replace(/--/g, '/'));
+}
+
 function moveFile(oldPath, newPath) {
     fs.rename(oldPath, newPath, function(err){
             if(err) {
@@ -193,7 +200,7 @@ function processImage(bucket, conf, file, id) {
           , quality = m[2] ? conf.quality[m[2]] : 100
           ;
         handleImage(rawImage, _w, _h, quality, function(chain) {
-                writeChain(chain, _path.join(conf.uploadDir, bucket, tag, id), cclog.intercept('handleTag ' + tag));
+                writeChain(chain, getBucketTagFile(bucket, tag, id), cclog.intercept('handleTag ' + tag));
         })
     }
 
