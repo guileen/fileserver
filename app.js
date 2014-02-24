@@ -256,7 +256,7 @@ qweb.res.sendStatus = function(statusCode, msg) {
 }
 
 var server = qweb();
-server.post('post:/:bucket', function(req, res) {
+server.post('/:bucket', function(req, res) {
         var bucket = req.params.bucket;
         var conf = config.buckets[bucket];
         if(!conf) {
@@ -355,6 +355,9 @@ server.post('post:/:bucket', function(req, res) {
 
 }).get('/:bucket/:id/exif', function(req, res) {
 
+}).get('/debug/:bucket', function(req, res) {
+        var text = fs.readFileSync(__dirname + '/upload.html', 'utf-8');
+        res.end(text.replace(/{bucket}/g, req.params.bucket));
 }).get('/:bucket/:id', function(req, res) {
         var bucket = req.params.bucket;
         var id = req.params.id;
@@ -387,9 +390,6 @@ server.post('post:/:bucket', function(req, res) {
                     chain.stream(format).pipe(res);
                 }
         })
-}).get('/debug/:bucket', function(req, res) {
-        var text = fs.readFileSync(__dirname + '/upload.html', 'utf-8');
-        res.end(text.replace(/{bucket}/g, req.params.bucket));
 }).on('domainError', function(err, req, res) {
         cclog.error(req.method, req.url, err);
         res.sendStatus(500, 'ERR:' + err.message);
