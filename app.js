@@ -110,7 +110,7 @@ function writeChain(chain, path, callback) {
 }
 
 function handleImage(path, width, height, quality, crop_rect, callback) {
-    console.log(handleImage, path, width, height);
+    cclog.info(handleImage, path, width, height);
     if(!callback) {
         if(typeof crop_rect == 'function') {
             callback = crop_rect;
@@ -326,9 +326,9 @@ server.post('/:bucket', function(req, res) {
         if(expectedLength > conf.maxSize) {
             return res.sendStatus(400, 'File too Large');
         }
-        console.log('expectedLength', expectedLength);
+        cclog.info('expectedLength', expectedLength);
         req.on('data', function(buffer) {
-                console.log('on data')
+                cclog.info('on data')
                 recieved += buffer.length;
                 if(recieved > expectedLength) {
                     req.abort();
@@ -340,14 +340,14 @@ server.post('/:bucket', function(req, res) {
                 }
         })
         req.pipe(fs.createWriteStream(tmpPath));
-        console.log('fooo');
+        cclog.info('fooo');
         // req.resume();
         req.on('end', function() {
                 var file = {
                     path : tmpPath
                   , type : contentType
                 }
-                console.log(recieved);
+                cclog.info(recieved);
                 processFile(bucket, conf, file, id);
                 res.end();
         });
@@ -398,5 +398,5 @@ server.post('/:bucket', function(req, res) {
 if(!module.parent) {
     var port = process.argv[2] || 7195;
     server.listen(port);
-    console.log('server listen at', port)
+    cclog.info('server listen at', port)
 }
