@@ -127,6 +127,7 @@ function handleImage(path, width, height, quality, crop_rect, callback) {
     var _h = parseInt(height);
     var quality = parseInt(quality);
     sizeOf(path, function(err, dim) {
+            if(err) throw err;
             var chain = gm(path);
             w = dim.width;
             h = dim.height;
