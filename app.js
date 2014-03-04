@@ -385,7 +385,7 @@ server.post('/:bucket', function(req, res) {
                 } else handle(format);
                 function handle(format) {
                     res.writeHead(200, {
-                            'Content-Type': mime.lookup(format)
+                            'Content-Type': mime.lookup(format || id)
                     })
                     chain.stream(format).pipe(res);
                 }
