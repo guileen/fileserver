@@ -376,8 +376,10 @@ server.post('/:bucket', function(req, res) {
             width = m[0];
             height = m[1];
         }
+        var filepath = getBucketFile(bucket, id);
 
-        handleImage(getBucketFile(bucket, id), width, height, quality, /* crop_rect */ function(chain) {
+        cclog.info('handle', filepath);
+        handleImage(filepath, width, height, quality, /* crop_rect */ function(chain) {
                 if(!format) {
                     chain.format(function(err, format) {
                             handle(format);
@@ -385,7 +387,7 @@ server.post('/:bucket', function(req, res) {
                 } else handle(format);
                 function handle(format) {
                     res.writeHead(200, {
-                            'Content-Type': mime.lookup(format || id)
+                            'Content-Type': mime.lookup(format || filepath)
                     })
                     chain.stream(format).pipe(res);
                 }
