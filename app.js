@@ -399,6 +399,7 @@ server.post('/:bucket', function(req, res) {
 });
 
 if(!module.parent) {
+    process.env.PATH = process.env.PATH + ':/usr/local/bin';
     var port = process.argv[2] || 7195;
     server.listen(port);
     cclog.info('server listen at', port)
